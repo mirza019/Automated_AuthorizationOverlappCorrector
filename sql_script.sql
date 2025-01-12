@@ -1,4 +1,3 @@
-
 -- Create the FilePermissions table
 CREATE TABLE FilePermissions (
     FileID INT IDENTITY PRIMARY KEY,
@@ -8,7 +7,7 @@ CREATE TABLE FilePermissions (
 
 -- Create the CurrentPermissions table
 CREATE TABLE CurrentPermissions (
-    FileID INT NOT NULL,
+    FileID INT IDENTITY PRIMARY KEY,
     FileName NVARCHAR(255) NOT NULL,
     CurrentUser NVARCHAR(255) NOT NULL
 );
@@ -41,7 +40,28 @@ LEFT JOIN FilePermissions fp ON cp.FileName = fp.FileName AND cp.CurrentUser = f
 WHERE fp.AuthorizedUser IS NULL;
 
 -- Example query to detect overlapping permissions
+SELECT FileName, COUNT(CurrentUser) AS OverlapCount
+FROM CurrentPermissions
+GROUP BY FileName
+HAVING COUNT(CurrentUser) > 1;
+
+-- Insert overlapping permissions for testing
+INSERT INTO CurrentPermissions (FileName, CurrentUser) VALUES
+('ProjectPlan.docx', 'user1@example.com'),
+('ProjectPlan.docx', 'user2@example.com'),
+('Budget.xlsx', 'manager@example.com'),
+('Budget.xlsx', 'user3@example.com');
+
+-- Query to view overlapping permissions
 SELECT FileName, CurrentUser
 FROM CurrentPermissions
-GROUP BY FileName, CurrentUser
-HAVING COUNT(*) > 1;
+WHERE FileName IN (
+    SELECT FileName
+    FROM CurrentPermissions
+    GROUP BY FileName
+    HAVING COUNT(CurrentUser) > 1
+);
+
+-- Add a unique constraint to prevent overlapping in the future
+ALTER TABLE CurrentPermissions
+ADD CONSTRAINT UniqueFileUser UNIQUE (FileName, CurrentUser);
