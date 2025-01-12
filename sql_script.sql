@@ -1,58 +1,22 @@
--- Create the FilePermissions table
-CREATE TABLE FilePermissions (
-    FileID INT IDENTITY PRIMARY KEY,
-    FileName NVARCHAR(255) NOT NULL,
-    AuthorizedUser NVARCHAR(255) NOT NULL
-);
+-- File: testing_and_corrections.sql
+-- This script tests for unauthorized access, overlapping permissions, and logs corrections for data inconsistencies.
 
--- Create the CurrentPermissions table
-CREATE TABLE CurrentPermissions (
-    FileID INT IDENTITY PRIMARY KEY,
-    FileName NVARCHAR(255) NOT NULL,
-    CurrentUser NVARCHAR(255) NOT NULL
-);
-
--- Create the CorrectionLogs table
-CREATE TABLE CorrectionLogs (
-    LogID INT IDENTITY PRIMARY KEY,
-    FileName NVARCHAR(255) NOT NULL,
-    UserName NVARCHAR(255) NOT NULL,
-    Action NVARCHAR(50) NOT NULL,
-    PreviousState NVARCHAR(255) NOT NULL,
-    CurrentState NVARCHAR(255) NOT NULL,
-    Timestamp DATETIME DEFAULT GETDATE()
-);
-
--- Insert initial data into FilePermissions
-INSERT INTO FilePermissions (FileName, AuthorizedUser) VALUES 
-('ProjectPlan.docx', 'admin@example.com'),
-('Budget.xlsx', 'manager@example.com');
-
--- Insert current permissions for testing
-INSERT INTO CurrentPermissions (FileName, CurrentUser) VALUES 
-('ProjectPlan.docx', 'admin@example.com'),
-('Budget.xlsx', 'user@example.com'); -- Unauthorized
-
--- Example query to detect unauthorized access
+-- Detect unauthorized access
+-- Files accessed by users who are not authorized
 SELECT cp.FileName, cp.CurrentUser
 FROM CurrentPermissions cp
-LEFT JOIN FilePermissions fp ON cp.FileName = fp.FileName AND cp.CurrentUser = fp.AuthorizedUser
+LEFT JOIN FilePermissions fp 
+    ON cp.FileName = fp.FileName AND cp.CurrentUser = fp.AuthorizedUser
 WHERE fp.AuthorizedUser IS NULL;
 
--- Example query to detect overlapping permissions
+-- Detect overlapping permissions
+-- Files with more than one user assigned
 SELECT FileName, COUNT(CurrentUser) AS OverlapCount
 FROM CurrentPermissions
 GROUP BY FileName
 HAVING COUNT(CurrentUser) > 1;
 
--- Insert overlapping permissions for testing
-INSERT INTO CurrentPermissions (FileName, CurrentUser) VALUES
-('ProjectPlan.docx', 'user1@example.com'),
-('ProjectPlan.docx', 'user2@example.com'),
-('Budget.xlsx', 'manager@example.com'),
-('Budget.xlsx', 'user3@example.com');
-
--- Query to view overlapping permissions
+-- View overlapping users for each file
 SELECT FileName, CurrentUser
 FROM CurrentPermissions
 WHERE FileName IN (
@@ -62,6 +26,29 @@ WHERE FileName IN (
     HAVING COUNT(CurrentUser) > 1
 );
 
--- Add a unique constraint to prevent overlapping in the future
+-- Log corrections
+-- Example: Correct unauthorized access and log the action
+INSERT INTO CorrectionLogs (FileName, UserName, Action, PreviousState, CurrentState)
+SELECT cp.FileName, cp.CurrentUser, 'Revoke Access', 'Unauthorized', 'Access Revoked'
+FROM CurrentPermissions cp
+LEFT JOIN FilePermissions fp 
+    ON cp.FileName = fp.FileName AND cp.CurrentUser = fp.AuthorizedUser
+WHERE fp.AuthorizedUser IS NULL;
+
+-- Remove unauthorized users from CurrentPermissions
+DELETE FROM CurrentPermissions
+WHERE FileName IN (
+    SELECT cp.FileName
+    FROM CurrentPermissions cp
+    LEFT JOIN FilePermissions fp 
+        ON cp.FileName = fp.FileName AND cp.CurrentUser = fp.AuthorizedUser
+    WHERE fp.AuthorizedUser IS NULL
+);
+
+-- Test corrections
+-- View logs of all corrections made
+SELECT * FROM CorrectionLogs;
+
+-- Add unique constraint to prevent overlapping permissions in the future
 ALTER TABLE CurrentPermissions
 ADD CONSTRAINT UniqueFileUser UNIQUE (FileName, CurrentUser);
